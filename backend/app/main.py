@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -97,19 +97,26 @@ async def health_check():
 # Job Management Endpoints
 # ============================================================================
 
+from .auth import get_current_user
+
+# ... (Previous imports)
+
+# ============================================================================
+# Job Management Endpoints
+# ============================================================================
+
 @app.post("/api/start-job", response_model=StartJobResponse, tags=["Jobs"])
 async def start_job(
     request: StartJobRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
 ):
     """
     Start a new lead generation job.
-    
-    The job runs asynchronously in the background. Use GET /api/job/{job_id}
-    to check the status and retrieve results.
     """
     # Create job in database
     job_data = {
+        "user_id": user.get("sub"), # Storing Clerk User ID
         "status": JobStatus.PENDING,
         "niche": request.niche,
         "location": request.location,
@@ -139,24 +146,34 @@ async def start_job(
 
 
 @app.get("/api/job/{job_id}", response_model=JobResponse, tags=["Jobs"])
-async def get_job(job_id: str):
+async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     """Get the status and details of a specific job."""
+    # TODO: Filter by user_id
     job = await get_job_by_id(job_id)
     
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Security Check: Ensure user owns this job
+    if job.get("user_id") and job.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to view this job")
     
     return JobResponse(**job)
 
 
 @app.get("/api/jobs", response_model=JobListResponse, tags=["Jobs"])
-async def list_jobs(limit: int = 50):
-    """List all jobs, sorted by creation date (newest first)."""
+async def list_jobs(limit: int = 50, user: dict = Depends(get_current_user)):
+    """List all jobs for the current user."""
+    # We need to update get_all_jobs to filter by user_id
+    # For now, we will filter in memory or update the DB function next
     jobs = await get_all_jobs(limit=limit)
     
+    # Filter only user's jobs (Temporary in-memory filter until DB function update)
+    user_jobs = [j for j in jobs if j.get("user_id") == user.get("sub") or not j.get("user_id")]
+    
     return JobListResponse(
-        jobs=[JobResponse(**job) for job in jobs],
-        total=len(jobs)
+        jobs=[JobResponse(**job) for job in user_jobs],
+        total=len(user_jobs)
     )
 
 
@@ -165,13 +182,17 @@ async def list_jobs(limit: int = 50):
 # ============================================================================
 
 @app.get("/api/download/{job_id}", tags=["Downloads"])
-async def download_result(job_id: str):
+async def download_result(job_id: str, user: dict = Depends(get_current_user)):
     """Download the CSV result for a completed job."""
     # Check job exists and is completed
     job = await get_job_by_id(job_id)
     
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Security Check
+    if job.get("user_id") and job.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to access this file")
     
     if job.get("status") != JobStatus.COMPLETED:
         raise HTTPException(
@@ -196,8 +217,81 @@ async def download_result(job_id: str):
 # Campaign Management Endpoints
 # ============================================================================
 
+# ... (create_new_campaign, get_campaign, list_campaigns processed in previous step)
+
+
+@app.post("/api/campaigns/{campaign_id}/start", tags=["Campaigns"])
+async def start_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+    """Start or resume a campaign."""
+    campaign = await get_campaign_by_id(campaign_id)
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Security Check
+    if campaign.get("user_id") and campaign.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to manage this campaign")
+    
+    if campaign["status"] not in [CampaignStatus.DRAFT, CampaignStatus.PAUSED, CampaignStatus.SCHEDULED]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot start campaign with status: {campaign['status']}"
+        )
+    
+    await update_campaign(campaign_id, {"status": CampaignStatus.RUNNING})
+    
+    return {"message": "Campaign started", "campaign_id": campaign_id}
+
+
+@app.post("/api/campaigns/{campaign_id}/pause", tags=["Campaigns"])
+async def pause_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
+    """Pause a running campaign."""
+    campaign = await get_campaign_by_id(campaign_id)
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Security Check
+    if campaign.get("user_id") and campaign.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to manage this campaign")
+    
+    if campaign["status"] != CampaignStatus.RUNNING:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot pause campaign with status: {campaign['status']}"
+        )
+    
+    await update_campaign(campaign_id, {"status": CampaignStatus.PAUSED})
+    
+    return {"message": "Campaign paused", "campaign_id": campaign_id}
+
+
+@app.get("/api/campaigns/{campaign_id}/emails", response_model=EmailLogsResponse, tags=["Campaigns"])
+async def get_campaign_emails(campaign_id: str, limit: int = 100, user: dict = Depends(get_current_user)):
+    """Get email logs for a campaign."""
+    campaign = await get_campaign_by_id(campaign_id)
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Security Check
+    if campaign.get("user_id") and campaign.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to view logs")
+    
+    logs = await get_email_logs_by_campaign(campaign_id, limit=limit)
+    
+    return EmailLogsResponse(
+        emails=[EmailLogResponse(**log) for log in logs],
+        total=len(logs)
+    )
+
+
+# ============================================================================
+# Campaign Management Endpoints
+# ============================================================================
+
 @app.post("/api/campaigns", response_model=CreateCampaignResponse, tags=["Campaigns"])
-async def create_new_campaign(request: CreateCampaignRequest):
+async def create_new_campaign(request: CreateCampaignRequest, user: dict = Depends(get_current_user)):
     """
     Create a new email campaign from an existing job's leads.
     """
@@ -206,6 +300,10 @@ async def create_new_campaign(request: CreateCampaignRequest):
     
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Security Check
+    if job.get("user_id") and job.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to access this job")
     
     if job.get("status") != JobStatus.COMPLETED:
         raise HTTPException(
@@ -227,6 +325,7 @@ async def create_new_campaign(request: CreateCampaignRequest):
     
     # Create campaign
     campaign_data = {
+        "user_id": user.get("sub"), # Storing User ID
         "job_id": request.job_id,
         "name": request.name,
         "status": status,
@@ -247,24 +346,32 @@ async def create_new_campaign(request: CreateCampaignRequest):
 
 
 @app.get("/api/campaigns/{campaign_id}", response_model=CampaignResponse, tags=["Campaigns"])
-async def get_campaign(campaign_id: str):
+async def get_campaign(campaign_id: str, user: dict = Depends(get_current_user)):
     """Get campaign details and metrics."""
     campaign = await get_campaign_by_id(campaign_id)
     
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Security Check
+    if campaign.get("user_id") and campaign.get("user_id") != user.get("sub"):
+         raise HTTPException(status_code=403, detail="Not authorized to view this campaign")
     
     return CampaignResponse(**campaign)
 
 
 @app.get("/api/campaigns", response_model=CampaignListResponse, tags=["Campaigns"])
-async def list_campaigns(limit: int = 50):
-    """List all campaigns, sorted by creation date (newest first)."""
+async def list_campaigns(limit: int = 50, user: dict = Depends(get_current_user)):
+    """List all campaigns for current user."""
+    # TODO: Update DB function to filter by user_id
     campaigns = await get_all_campaigns(limit=limit)
     
+    # Filter in memory for now
+    user_campaigns = [c for c in campaigns if c.get("user_id") == user.get("sub") or not c.get("user_id")]
+    
     return CampaignListResponse(
-        campaigns=[CampaignResponse(**c) for c in campaigns],
-        total=len(campaigns)
+        campaigns=[CampaignResponse(**c) for c in user_campaigns],
+        total=len(user_campaigns)
     )
 
 
