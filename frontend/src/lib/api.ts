@@ -4,6 +4,33 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+/**
+ * Get authentication headers with Clerk token
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+    };
+
+    // Get token from Clerk (client-side only)
+    if (typeof window !== 'undefined') {
+        try {
+            const clerk = (window as any).Clerk;
+            if (clerk?.session) {
+                const token = await clerk.session.getToken();
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to get Clerk token:', error);
+        }
+    }
+
+    return headers;
+}
+
+
 export interface Job {
     id: string;
     status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -41,9 +68,7 @@ export interface JobListResponse {
 export async function startJob(request: StartJobRequest): Promise<StartJobResponse> {
     const response = await fetch(`${API_URL}/api/start-job`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: await getAuthHeaders(),
         body: JSON.stringify(request),
     });
 
@@ -59,7 +84,9 @@ export async function startJob(request: StartJobRequest): Promise<StartJobRespon
  * Get a specific job by ID
  */
 export async function getJob(jobId: string): Promise<Job> {
-    const response = await fetch(`${API_URL}/api/job/${jobId}`);
+    const response = await fetch(`${API_URL}/api/job/${jobId}`, {
+        headers: await getAuthHeaders(),
+    });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -73,7 +100,9 @@ export async function getJob(jobId: string): Promise<Job> {
  * Get all jobs
  */
 export async function getJobs(limit: number = 50): Promise<JobListResponse> {
-    const response = await fetch(`${API_URL}/api/jobs?limit=${limit}`);
+    const response = await fetch(`${API_URL}/api/jobs?limit=${limit}`, {
+        headers: await getAuthHeaders(),
+    });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -180,9 +209,7 @@ export interface EmailLogsResponse {
 export async function createCampaign(request: CreateCampaignRequest): Promise<CreateCampaignResponse> {
     const response = await fetch(`${API_URL}/api/campaigns`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: await getAuthHeaders(),
         body: JSON.stringify(request),
     });
 
@@ -198,7 +225,9 @@ export async function createCampaign(request: CreateCampaignRequest): Promise<Cr
  * Get a specific campaign by ID
  */
 export async function getCampaign(campaignId: string): Promise<Campaign> {
-    const response = await fetch(`${API_URL}/api/campaigns/${campaignId}`);
+    const response = await fetch(`${API_URL}/api/campaigns/${campaignId}`, {
+        headers: await getAuthHeaders(),
+    });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -212,7 +241,9 @@ export async function getCampaign(campaignId: string): Promise<Campaign> {
  * Get all campaigns
  */
 export async function getCampaigns(limit: number = 50): Promise<CampaignListResponse> {
-    const response = await fetch(`${API_URL}/api/campaigns?limit=${limit}`);
+    const response = await fetch(`${API_URL}/api/campaigns?limit=${limit}`, {
+        headers: await getAuthHeaders(),
+    });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -228,6 +259,7 @@ export async function getCampaigns(limit: number = 50): Promise<CampaignListResp
 export async function startCampaign(campaignId: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/start`, {
         method: 'POST',
+        headers: await getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -242,6 +274,7 @@ export async function startCampaign(campaignId: string): Promise<void> {
 export async function pauseCampaign(campaignId: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/pause`, {
         method: 'POST',
+        headers: await getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -257,7 +290,9 @@ export async function getCampaignEmails(
     campaignId: string,
     limit: number = 100
 ): Promise<EmailLogsResponse> {
-    const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/emails?limit=${limit}`);
+    const response = await fetch(`${API_URL}/api/campaigns/${campaignId}/emails?limit=${limit}`, {
+        headers: await getAuthHeaders(),
+    });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
