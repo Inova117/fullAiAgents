@@ -30,16 +30,7 @@ export default function CampaignsPage() {
     }
 
     const getStatusBadge = (status: Campaign['status']) => {
-        const statusMap: Record<Campaign['status'], { color: string; text: string }> = {
-            draft: { color: 'gray', text: 'Draft' },
-            scheduled: { color: 'blue', text: 'Scheduled' },
-            running: { color: 'green', text: 'Running' },
-            paused: { color: 'yellow', text: 'Paused' },
-            completed: { color: 'purple', text: 'Completed' },
-            failed: { color: 'red', text: 'Failed' },
-        };
-        const { color, text } = statusMap[status];
-        return <StatusBadge status={status} text={text} />;
+        return <StatusBadge status={status} />;
     };
 
     if (loading && campaigns.length === 0) {
