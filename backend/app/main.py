@@ -167,7 +167,12 @@ async def process_pending_jobs_endpoint(
         
         # Queue all pending jobs as background tasks
         for job in user_pending_jobs:
-            job_id = str(job["_id"])
+            # MongoDB _id might be ObjectId or already a string
+            job_id = str(job.get("_id", job.get("id", "")))
+            if not job_id:
+                print(f"[ERROR] Job without ID: {job}")
+                continue
+                
             background_tasks.add_task(
                 process_pipeline_job,
                 job_id=job_id,
@@ -183,6 +188,8 @@ async def process_pending_jobs_endpoint(
         }
     except Exception as e:
         print(f"[ERROR] process_pending_jobs_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
