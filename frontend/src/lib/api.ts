@@ -7,19 +7,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 /**
  * Get authentication headers with Clerk token
  */
-async function getAuthHeaders(): Promise<HeadersInit> {
+async function getAuthHeaders(token?: string | null): Promise<HeadersInit> {
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
     };
 
-    // Get token from Clerk (client-side only)
+    // If token is provided directly, use it
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+    }
+
+    // Fallback: try to get token from window.Clerk (client-side only)
     if (typeof window !== 'undefined') {
         try {
             const clerk = (window as any).Clerk;
             if (clerk?.session) {
-                const token = await clerk.session.getToken();
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
+                const sessionToken = await clerk.session.getToken();
+                if (sessionToken) {
+                    headers['Authorization'] = `Bearer ${sessionToken}`;
                 }
             }
         } catch (error) {
@@ -99,9 +105,9 @@ export async function getJob(jobId: string): Promise<Job> {
 /**
  * Get all jobs
  */
-export async function getJobs(limit: number = 50): Promise<JobListResponse> {
+export async function getJobs(limit: number = 50, token?: string | null): Promise<JobListResponse> {
     const response = await fetch(`${API_URL}/api/jobs?limit=${limit}`, {
-        headers: await getAuthHeaders(),
+        headers: await getAuthHeaders(token),
     });
 
     if (!response.ok) {

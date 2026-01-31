@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { Job, getJobs, getDownloadUrl, formatRelativeTime } from '@/lib/api';
 import StatusBadge from './StatusBadge';
 
@@ -12,10 +13,12 @@ export default function JobsTable({ refreshTrigger }: JobsTableProps) {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { getToken } = useAuth();
 
     const fetchJobs = useCallback(async () => {
         try {
-            const response = await getJobs();
+            const token = await getToken();
+            const response = await getJobs(50, token);
             setJobs(response.jobs);
             setError(null);
         } catch (err) {
@@ -23,7 +26,7 @@ export default function JobsTable({ refreshTrigger }: JobsTableProps) {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [getToken]);
 
     // Initial fetch and poll every 5 seconds
     useEffect(() => {
