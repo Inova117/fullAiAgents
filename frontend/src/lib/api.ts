@@ -302,6 +302,21 @@ export async function getCampaignEmails(
     return response.json();
 }
 
+export async function processPendingJobs(): Promise<{ message: string; processed: number }> {
+    const response = await fetch(`${API_URL}/api/process-pending-jobs`, {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(error.detail || 'Failed to process pending jobs');
+    }
+
+    return response.json();
+}
+
+
 /**
  * Format percentage
  */
