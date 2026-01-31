@@ -28,7 +28,8 @@ async def process_pipeline_job(
     job_id: str,
     niche: str,
     location: str,
-    max_results: int = 50
+    max_results: int = 50,
+    mode: str = "local"
 ) -> None:
     """
     Background task to run the lead generation pipeline.

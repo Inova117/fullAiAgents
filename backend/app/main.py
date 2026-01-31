@@ -145,6 +145,50 @@ async def start_job(
     )
 
 
+@app.post("/api/process-pending-jobs", tags=["Jobs"])
+async def process_pending_jobs_endpoint(user: dict = Depends(get_current_user)):
+    """
+    Manually process all pending jobs.
+    Useful when BackgroundTasks fail due to server sleep/restart.
+    """
+    jobs = await get_all_jobs(limit=100)
+    user_pending_jobs = [
+        j for j in jobs 
+        if j.get("status") == JobStatus.PENDING 
+        and j.get("user_id") == user.get("sub")
+    ]
+    
+    if not user_pending_jobs:
+        return {"message": "No pending jobs found", "processed": 0}
+    
+    processed_count = 0
+    for job in user_pending_jobs:
+        job_id = str(job["_id"])
+        try:
+            # Process synchronously (blocking, but necessary for reliability)
+            await process_pipeline_job(
+                job_id=job_id,
+                niche=job.get("niche", ""),
+                location=job.get("location", ""),
+                max_results=job.get("max_results", 50),
+                mode=job.get("mode", "local")
+            )
+            processed_count += 1
+        except Exception as e:
+            print(f"[ERROR] Failed to process job {job_id}: {e}")
+            from .database import update_job
+            await update_job(job_id, {
+                "status": JobStatus.FAILED,
+                "error_message": str(e)[:500]
+            })
+    
+    return {
+        "message": f"Processed {processed_count} pending job(s)",
+        "processed": processed_count
+    }
+
+
+
 @app.get("/api/job/{job_id}", response_model=JobResponse, tags=["Jobs"])
 async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     """Get the status and details of a specific job."""
