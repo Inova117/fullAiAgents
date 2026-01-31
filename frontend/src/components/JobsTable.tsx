@@ -140,9 +140,19 @@ export default function JobsTable({ refreshTrigger }: JobsTableProps) {
                                                 Download
                                             </a>
                                         ) : job.status === 'failed' ? (
-                                            <span className="text-red-400 text-sm" title={job.error_message || 'Unknown error'}>
-                                                Failed
-                                            </span>
+                                            <div className="group relative inline-block">
+                                                <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium cursor-help">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    View Error
+                                                </button>
+                                                {job.error_message && (
+                                                    <div className="invisible group-hover:visible absolute right-0 bottom-full mb-2 w-80 p-4 bg-slate-800 border border-red-500/30 rounded-lg shadow-xl z-10">
+                                                        <p className="text-xs text-red-400 font-mono break-words">{job.error_message}</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         ) : (
                                             <span className="text-slate-500 text-sm">—</span>
                                         )}
