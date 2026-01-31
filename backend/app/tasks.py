@@ -20,8 +20,8 @@ from .models import JobStatus
 load_dotenv()
 
 # Configuration
-ENGINE_PATH = Path(os.getenv("ENGINE_PATH", "../engine")).resolve()
-EXPORTS_DIR = Path(__file__).parent.parent.parent / "data" / "exports"
+ENGINE_PATH = Path(os.getenv("ENGINE_PATH", "./engine")).resolve()
+EXPORTS_DIR = Path(__file__).parent.parent / "data" / "exports"
 
 
 async def process_pipeline_job(
