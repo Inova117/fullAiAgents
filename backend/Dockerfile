@@ -8,18 +8,19 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy backend requirements and install dependencies
-COPY requirements.txt .
+# Note: Context must be set to repo root in Render
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy engine requirements and install dependencies
-COPY ../engine/requirements.txt ./engine_requirements.txt
+COPY engine/requirements.txt ./engine_requirements.txt
 RUN pip install --no-cache-dir -r engine_requirements.txt
 
 # Copy the backend application code
-COPY app/ ./app/
+COPY backend/app/ ./app/
 
 # Copy the engine directory (needed for pipeline execution)
-COPY ../engine/ ./engine/
+COPY engine/ ./engine/
 
 # Create data directories
 RUN mkdir -p /app/data/exports
