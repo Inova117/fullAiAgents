@@ -31,24 +31,23 @@ def get_jwks() -> dict:
         return jwks_cache
         
     try:
-        # If CLERK_ISSUER_URL isn't set, try to derive from secret or env
-        # For now, we expect the user to provide the JWKS URL or ISSUER URL
-        # Defaulting to a placeholder if not set, user must configure
-        issuer = os.getenv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY")
-        if not issuer:
-             # Fallback logic or error
-             pass
-        
-        # NOTE: In a real prod environment, you should set CLERK_JWKS_URL env var
         jwks_url = os.getenv("CLERK_JWKS_URL")
         
+        # Fallback: Try to construct from ISSUER_URL
         if not jwks_url:
-            # Try to build from frontend key if standard instance
-            # This is tricky without the specific instance URL suitable for a template code
-            # We will use a fallback or require the env var.
-            raise ValueError("CLERK_JWKS_URL environment variable is missing")
+            issuer = os.getenv("CLERK_ISSUER_URL")
+            if issuer:
+                # Remove trailing slash if present
+                issuer = issuer.rstrip("/")
+                jwks_url = f"{issuer}/.well-known/jwks.json"
+                print(f"[AUTH] Derived JWKS URL from Issuer: {jwks_url}")
+        
+        if not jwks_url:
+            print("[AUTH] ERROR: CLERK_JWKS_URL and CLERK_ISSUER_URL are both missing.")
+            return {}
 
-        response = requests.get(jwks_url)
+        print(f"[AUTH] Fetching JWKS from: {jwks_url}")
+        response = requests.get(jwks_url, timeout=10)
         response.raise_for_status()
         keys = response.json()
         
@@ -87,9 +86,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             if CLERK_PEM_PUBLIC_KEY:
                  public_key = CLERK_PEM_PUBLIC_KEY
             else:
+                 print(f"[AUTH] Token KID {kid} not found in JWKS. Available KIDs: {[k.get('kid') for k in jwks.get('keys', [])]}")
                  raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token: Key ID not found",
+                    detail=f"Invalid token: Key ID {kid} not found",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
